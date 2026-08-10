@@ -1,7 +1,10 @@
 import { ApiError, type ApiEnvelope, type LoginRequest, type LoginResponse } from '../types/api';
 
-/** API 统一前缀（vite dev/preview proxy 将 /api -> :8000）。 */
-export const API_BASE = '/api/v1';
+/** API 统一前缀。
+ * - 开发态（vite proxy）：未设 VITE_API_BASE 时走 /api/v1，由 dev server 代理到 :8000。
+ * - 生产态（Vercel）：通过 VITE_API_BASE 指向后端域名（如 https://xxx.vercel.app/api/v1）。
+ */
+export const API_BASE = import.meta.env.VITE_API_BASE || '/api/v1';
 
 const TOKEN_KEY = 'wecom_archive_token';
 

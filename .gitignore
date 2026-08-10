@@ -29,3 +29,6 @@ coverage/
 .vscode/
 .idea/
 .DS_Store
+
+# Vite 配置临时编译产物（构建时生成，非源码）
+frontend/vite.config.ts.timestamp-*.mjs

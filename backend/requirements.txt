@@ -8,3 +8,4 @@ python-multipart==0.0.20
 cryptography==44.0.0
 pyyaml==6.0.2
 httpx==0.28.1
+psycopg2-binary==2.9.10  # Vercel 生产态 Postgres 驱动（本地 SQLite 不触发连接）

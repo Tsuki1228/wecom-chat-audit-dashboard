@@ -1,0 +1,928 @@
+openapi: 3.0.3
+
+info:
+  title: 企业微信会话内容存档看板 API
+  version: 1.0.0
+  description: |
+    企业微信客户群/外部群聊天记录（经官方会话内容存档）的拉取、存储与查询服务接口。
+
+    版本前缀固定为 /api/v1/，所有路径均已包含此前缀，不在 Header 中传递版本。
+
+    统一响应结构：
+      { "code": 0, "data": {}, "message": "" }
+      code 为 0 表示成功，非 0 表示错误；message 在错误时给出人类可读描述。
+
+    认证方式：
+      Authorization: Bearer <jwt>
+      除 /api/v1/auth/login 与 /api/v1/health 外，所有端点要求携带有效 JWT。
+      /health 供内部探针调用，可不带鉴权；携带合法 JWT 时同样放行。
+
+    前后端以本文件为唯一契约：前端据其手写 TypeScript 类型，后端据其实现。
+  contact:
+    name: MVP 开发专家团
+    email: dev@example.com
+
+servers:
+  - url: http://localhost:8000
+    description: 本地演示态（SQLite + Mock 拉取）
+  - url: https://api.example.com
+    description: 生产态（PostgreSQL + 官方 SDK 拉取）
+
+tags:
+  - name: Auth
+    description: 登录与令牌签发
+  - name: Rooms
+    description: 会话/群聊列表与详情
+  - name: Messages
+    description: 消息时间线与单条详情
+  - name: Search
+    description: 全文与条件检索
+  - name: Members
+    description: 成员（员工/外部联系人）列表
+  - name: Media
+    description: 媒体文件代理访问
+  - name: Health
+    description: 服务与健康探测
+
+security: []
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: 管理后台登录并获取 JWT
+      description: 使用账号密码换取访问令牌。该端点不需要鉴权。
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功，返回令牌
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: 账号或密码错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: 请求参数缺失或格式错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rooms:
+    get:
+      tags: [Rooms]
+      summary: 会话/群聊列表
+      description: 返回会话列表，含名称、消息数、最后消息时间与类型。支持分页与关键词过滤。
+      operationId: listRooms
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: 页码，从 1 开始
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: 每页条数
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: keyword
+          in: query
+          description: 按会话名称模糊过滤
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功，返回会话列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/RoomListData'
+        '401':
+          description: 未携带或携带无效 JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/rooms/{roomid}:
+    get:
+      tags: [Rooms]
+      summary: 会话详情
+      description: 返回指定会话的基本信息与成员列表。
+      operationId: getRoom
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: roomid
+          in: path
+          description: 会话 ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功，返回会话详情与成员
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/RoomDetailData'
+        '401':
+          description: 未携带或携带无效 JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 会话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/messages:
+    get:
+      tags: [Messages]
+      summary: 消息时间线
+      description: 按会话返回消息时间线，支持分页与游标翻页（before_msg_time 取更早消息）。
+      operationId: listMessages
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: roomid
+          in: query
+          description: 会话 ID，时间线查询必填
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: 页码，从 1 开始（与 before_msg_time 二选一，优先使用游标）
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: 每页条数
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: before_msg_time
+          in: query
+          description: 游标，取该毫秒时间戳之前的消息，用于向上翻页
+          required: false
+          schema:
+            type: integer
+            description: 企业微信消息时间戳（毫秒）
+      responses:
+        '200':
+          description: 查询成功，返回消息时间线
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MessageListData'
+        '400':
+          description: 缺少 roomid 或参数非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未携带或携带无效 JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/messages/{msgid}:
+    get:
+      tags: [Messages]
+      summary: 单条消息详情
+      description: 返回指定 msgid 的单条消息完整内容。
+      operationId: getMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: msgid
+          in: path
+          description: 消息 ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功，返回消息详情
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MessageDetailData'
+        '401':
+          description: 未携带或携带无效 JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 消息不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/search:
+    get:
+      tags: [Search]
+      summary: 全文与条件检索消息
+      description: 按关键词及可选条件（会话、发送者、消息类型、时间范围）检索消息。
+      operationId: searchMessages
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          description: 检索关键词，必填
+          required: true
+          schema:
+            type: string
+        - name: roomid
+          in: query
+          description: 限定会话范围
+          required: false
+          schema:
+            type: string
+        - name: sender_id
+          in: query
+          description: 限定发送者
+          required: false
+          schema:
+            type: string
+        - name: msg_type
+          in: query
+          description: 限定消息类型，如 text/image/voice/video/file/link
+          required: false
+          schema:
+            type: string
+        - name: start
+          in: query
+          description: 时间下界（毫秒时间戳）
+          required: false
+          schema:
+            type: integer
+        - name: end
+          in: query
+          description: 时间上界（毫秒时间戳）
+          required: false
+          schema:
+            type: integer
+        - name: page
+          in: query
+          description: 页码，从 1 开始
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: 每页条数
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 检索成功，返回命中结果
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/SearchResultData'
+        '400':
+          description: 缺少 q 或参数非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未携带或携带无效 JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/members:
+    get:
+      tags: [Members]
+      summary: 成员列表
+      description: 返回成员列表，含员工与外部联系人，支持关键词与类型过滤。
+      operationId: listMembers
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: keyword
+          in: query
+          description: 按显示名称模糊过滤
+          required: false
+          schema:
+            type: string
+        - name: user_type
+          in: query
+          description: 成员类型过滤，1=员工 2=外部联系人 3=机器人
+          required: false
+          schema:
+            type: integer
+            enum: [1, 2, 3]
+        - name: page
+          in: query
+          description: 页码，从 1 开始
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: 每页条数
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 查询成功，返回成员列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/MemberListData'
+        '401':
+          description: 未携带或携带无效 JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/media:
+    get:
+      tags: [Media]
+      summary: 媒体文件代理
+      description: 按媒体相对路径代理返回原始媒体文件（图片/语音/视频/文件）。演示态返回占位或本地静态资源。
+      operationId: getMedia
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: path
+          in: query
+          description: 媒体相对路径（来自消息的 media_path）
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 媒体文件二进制流
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: 缺少 path 或路径非法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: 未携带或携带无效 JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 媒体文件不存在或已超期
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: 服务与健康探测
+      description: |
+        探测服务可用性与拉取位点状态。供内部探针（如负载均衡、监控）调用，可不带鉴权；
+        携带合法 JWT 时同样放行。不返回业务敏感数据。
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: 服务正常，返回健康状态
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/HealthData'
+        '500':
+          description: 服务异常（数据库不可达或拉取停滞）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: 统一错误响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ApiResponse:
+      type: object
+      required: [code, data, message]
+      properties:
+        code:
+          type: integer
+          description: 状态码，0 表示成功，非 0 表示错误
+          example: 0
+        data:
+          type: object
+          description: 响应数据，错误时通常为 null
+          nullable: true
+        message:
+          type: string
+          description: 错误时的人类可读描述，成功时为空字符串
+          example: ""
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          description: 非 0 错误码
+          example: 40100
+        data:
+          type: object
+          nullable: true
+          description: 错误时通常为 null
+        message:
+          type: string
+          description: 人类可读错误描述
+          example: 未授权，请重新登录
+        request_id:
+          type: string
+          nullable: true
+          description: 链路追踪 ID，用于排查问题
+          example: req_8f3a1c2b
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          description: 管理后台账号
+          example: admin
+        password:
+          type: string
+          format: password
+          description: 登录密码
+          example: "********"
+
+    TokenResponse:
+      type: object
+      required: [token, token_type, expires_in]
+      properties:
+        token:
+          type: string
+          description: JWT 访问令牌
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxxxx
+        token_type:
+          type: string
+          default: Bearer
+          description: 令牌类型
+          example: Bearer
+        expires_in:
+          type: integer
+          description: 令牌有效期（秒）
+          example: 7200
+
+    Room:
+      type: object
+      required: [roomid, room_name, room_type]
+      properties:
+        roomid:
+          type: string
+          description: 会话 ID
+          example: wrkSFfCgAADEbuQj4c2z0l3ABCDEF
+        room_name:
+          type: string
+          description: 群名称或会话标题
+          example: 华东区客户对接群
+        room_type:
+          type: integer
+          enum: [1, 2, 3]
+          description: 1=群聊 2=单聊 3=外部群
+          example: 3
+        member_count:
+          type: integer
+          description: 成员数（快照）
+          example: 42
+        message_count:
+          type: integer
+          description: 会话消息总数（接口派生，非存储字段）
+          example: 1280
+        last_msg_time:
+          type: integer
+          description: 最近消息时间戳（毫秒）
+          example: 1700000000000
+        last_msg_preview:
+          type: string
+          nullable: true
+          description: 最近一条消息摘要
+          example: 报价已发您邮箱，请查收
+        last_sync:
+          type: string
+          format: date-time
+          nullable: true
+          description: 最近一次拉取到此会话的时间（UTC）
+          example: "2026-08-10T01:30:00Z"
+
+    Message:
+      type: object
+      required: [msgid, roomid, sender_id, sender_type, msg_type, msg_time, msg_time_ts, action, content]
+      properties:
+        msgid:
+          type: string
+          description: 消息唯一 ID
+          example: msgid_abc123
+        roomid:
+          type: string
+          description: 群/会话 ID
+          example: wrkSFfCgAADEbuQj4c2z0l3ABCDEF
+        sender_id:
+          type: string
+          description: 发送者 userid 或 external_userid
+          example: ZhangSan
+        sender_type:
+          type: integer
+          enum: [1, 2, 3]
+          description: 1=员工 2=外部联系人 3=机器人
+          example: 1
+        sender_name:
+          type: string
+          nullable: true
+          description: 发送者显示名（接口派生，非存储字段）
+          example: 张三
+        receiver_ids:
+          type: array
+          nullable: true
+          items:
+            type: string
+          description: 接收者列表
+          example: ["LiSi", "WangWu"]
+        msg_type:
+          type: string
+          description: 消息类型，如 text/image/voice/video/file/link
+          example: text
+        msg_time:
+          type: integer
+          description: 企业微信发送时间戳（毫秒，原值）
+          example: 1700000000000
+        msg_time_ts:
+          type: string
+          format: date-time
+          description: 由 msg_time 转换的 UTC 时间，用于索引与排序
+          example: "2026-11-14T22:13:20Z"
+        action:
+          type: string
+          enum: [send, recall, switch]
+          default: send
+          description: 消息动作，send=发送 recall=撤回 switch=切换会话
+          example: send
+        content:
+          type: object
+          description: 按 msg_type 结构化的消息正文，字段随类型变化
+          example:
+            content: 你好，报价单见附件
+        media_path:
+          type: string
+          nullable: true
+          description: 媒体相对路径，无媒体时为空
+          example: media/msgid_abc123.png
+
+    Member:
+      type: object
+      required: [user_id, user_type, display_name]
+      properties:
+        user_id:
+          type: string
+          description: userid 或 external_userid
+          example: ZhangSan
+        user_type:
+          type: integer
+          enum: [1, 2, 3]
+          description: 1=员工 2=外部联系人 3=机器人
+          example: 1
+        display_name:
+          type: string
+          description: 显示名称
+          example: 张三
+        corp_name:
+          type: string
+          nullable: true
+          description: 公司名（外部联系人）
+          example: 某某科技有限公司
+        avatar_path:
+          type: string
+          nullable: true
+          description: 头像相对路径
+          example: avatars/ZhangSan.png
+
+    SearchResult:
+      allOf:
+        - $ref: '#/components/schemas/Message'
+        - type: object
+          properties:
+            room_name:
+              type: string
+              nullable: true
+              description: 命中消息所属会话名称（用于跳转定位）
+              example: 华东区客户对接群
+            snippet:
+              type: string
+              nullable: true
+              description: 命中高亮摘要（纯文本，高亮标记由前端处理）
+              example: 报价已发您邮箱，请查收
+
+    RoomListData:
+      type: object
+      required: [items, total, page, limit, hasMore]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Room'
+        total:
+          type: integer
+          description: 符合条件的总条数
+          example: 36
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        hasMore:
+          type: boolean
+          description: 是否还有下一页
+          example: true
+
+    RoomDetailData:
+      type: object
+      required: [room, members]
+      properties:
+        room:
+          $ref: '#/components/schemas/Room'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+
+    MessageListData:
+      type: object
+      required: [items, total, page, limit, hasMore]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        total:
+          type: integer
+          description: 该会话消息总数
+          example: 1280
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        hasMore:
+          type: boolean
+          description: 是否还有更早消息（用于游标翻页）
+          example: true
+        before_msg_time:
+          type: integer
+          nullable: true
+          description: 下一页游标；为 null 表示无更早消息
+          example: 1699999000000
+
+    MessageDetailData:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+
+    SearchResultData:
+      type: object
+      required: [items, total, page, limit, hasMore]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+        total:
+          type: integer
+          description: 命中结果总数
+          example: 18
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        hasMore:
+          type: boolean
+          example: false
+
+    MemberListData:
+      type: object
+      required: [items, total, page, limit, hasMore]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+        total:
+          type: integer
+          example: 120
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        hasMore:
+          type: boolean
+          example: true
+
+    HealthData:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+          description: 服务整体状态
+          example: ok
+        db:
+          type: string
+          description: 数据库连通性
+          example: ok
+        pull_cursor:
+          type: object
+          description: 拉取位点状态（5 天窗口策略）
+          properties:
+            last_seq:
+              type: integer
+              description: 已拉取的最大 seq
+              example: 58213
+            last_pull_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: 最近一次成功拉取时间（UTC）
+              example: "2026-08-10T01:30:00Z"
+            consecutive_empty:
+              type: integer
+              description: 连续空拉次数（监控用）
+              example: 0

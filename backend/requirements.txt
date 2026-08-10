@@ -1,0 +1,10 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+python-jose[cryptography]==3.3.0
+passlib==1.7.4
+bcrypt==4.0.1  # passlib 1.7.4 与 bcrypt>=4.1 不兼容（无法读取版本号）；固定 4.0.1 以避免登录校验告警
+python-multipart==0.0.20
+cryptography==44.0.0
+pyyaml==6.0.2
+httpx==0.28.1

@@ -1,0 +1,98 @@
+/* =========================================================================
+ * Design Tokens — 由 design-tokens.json 生成（含 UIUX 设计 §1.1 C-extension）
+ * 全部颜色经 Token 引用；禁止硬编码 hex（团队红线仅允许 #fff/#000，本文件亦统一改用 Token）。
+ * 四层架构：A1-identity → A2-semantic → B-slot → C-extension
+ * ========================================================================= */
+
+:root {
+  /* ---- A1-identity（品牌 DNA） ---- */
+  --bg: #F2F3F5; /* 应用整体背景（企业微信底色） */
+  --surface: #FFFFFF; /* 侧边栏 / 卡片 / 面板背景 */
+  --surface-chat: #EDEDED; /* 聊天时间线背景（微信灰） */
+  --fg: #1F1F1F; /* 主文本 */
+  --muted: #6B6F76; /* 次级文本 */
+  --accent: #07C160; /* 企业微信绿：激活态、主操作、品牌标识 */
+  --border: #E3E5E8; /* 默认边框 / 分隔线 */
+
+  /* ---- A2-semantic（语义色） ---- */
+  --accent-on: #FFFFFF; /* accent 背景上的前景文字 */
+  --accent-hover: #06AD56; /* accent 悬停 */
+  --accent-active: #059A4D; /* accent 激活 */
+  --success: #2BA471; /* 成功 / 已同步 */
+  --warn: #E6A23C; /* 警告 / 部分失败 */
+  --danger: #F56C6C; /* 错误 / 拉取失败 */
+  --info: #4C8DFF; /* 链接 / 提示蓝 */
+
+  /* ---- B-slot（组件别名层） ---- */
+  --surface-warm: #F7F8FA; /* 行 hover / 三级表面 */
+  --fg-2: #4E5157; /* 次级前景（气泡内强调文字） */
+  --meta: #9AA0A6; /* 三级前景：时间戳、元数据 */
+  --border-soft: #F0F1F3; /* 行内分隔 */
+
+  --bubble-sent: #95EC69; /* 本端（员工）发出气泡——微信经典绿 */
+  --bubble-sent-fg: #1F1F1F;
+  --bubble-recv: #FFFFFF; /* 对端（他人）接收气泡——白 */
+  --bubble-recv-fg: #1F1F1F;
+
+  --tag-external-bg: #FFF4E5; /* 外部联系人标签底（暖琥珀） */
+  --tag-external-fg: #B26A00;
+  --tag-recall-bg: #F2F3F5; /* 撤回消息标签底 */
+  --tag-recall-fg: #9AA0A6;
+  --tag-bot-bg: #EAF3FF; /* 机器人标签底 */
+  --tag-bot-fg: #2E6FD6;
+
+  /* ---- C-extension（项目专属扩展） ---- */
+  --bubble-radius: 10px; /* 气泡圆角（微信风格，单角略方） */
+  --elev-bubble: 0 1px 2px rgba(0, 0, 0, 0.06); /* 气泡轻投影 */
+  --overlay: rgba(0, 0, 0, 0.55); /* 媒体预览遮罩 */
+  --skeleton: #E3E5E8; /* 骨架屏底色 */
+
+  /* ---- 字体 Token ---- */
+  --font-display: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
+  --font-body: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace; /* 时间戳 / msgid / 文件大小 */
+
+  --text-xs: 0.75rem; /* 12px 元数据、标签、时间戳 */
+  --text-sm: 0.8125rem; /* 13px 次级说明、列表副信息 */
+  --text-base: 0.875rem; /* 14px 正文、气泡文字 */
+  --text-md: 1rem; /* 16px 群名、区块标题 */
+  --text-lg: 1.125rem; /* 18px 页面标题、统计数字 */
+  --text-xl: 1.25rem; /* 20px 区块大标题 */
+  --text-2xl: 1.5rem; /* 24px 看板页主数字 */
+  --text-3xl: 2rem; /* 32px 详情页标题 */
+
+  --weight-read: 400; /* 正文 */
+  --weight-emphasize: 510; /* 群名、小标题 */
+  --weight-announce: 590; /* 页面主标题、统计数字 */
+
+  /* ---- 间距 Token（4px 网格） ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* ---- 圆角 Token ---- */
+  --radius-sm: 6px; /* 按钮、输入框、Badge */
+  --radius-md: 8px; /* 卡片、缩略图 */
+  --radius-lg: 12px; /* 弹窗、大图预览 */
+  --radius-pill: 9999px; /* 头像、圆形按钮、标签 */
+
+  /* ---- 阴影 Token（企业微信偏平，仅轻投影） ---- */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --elev-pop: 0 4px 16px rgba(0, 0, 0, 0.12); /* 下拉面板、预览浮层 */
+
+  /* ---- 动效 Token（禁止弹跳缓动） ---- */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ---- 图标 Token ---- */
+  --icon-stroke: 1.5px;
+}

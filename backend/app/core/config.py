@@ -12,7 +12,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent  # backend/
 
 
 def _default_database_url() -> str:
-    """SQLite 默认落在 backend 目录，绝对路径避免工作目录漂移。"""
+    """数据库地址解析优先级：
+
+    1. 显式 DATABASE_URL（生产态 Postgres / 本地自定义 SQLite）
+    2. Vercel 等无持久化文件系统的环境 → /tmp 下的 SQLite（冷启动自动重新灌种子）
+    3. 本地默认 → backend 目录下的 wecom_audit.db
+    """
+    explicit = os.getenv("DATABASE_URL")
+    if explicit:
+        return explicit
+    if os.getenv("VERCEL"):
+        # Vercel 函数环境项目目录只读，仅 /tmp 可写；四个斜杠表示绝对路径
+        return "sqlite:////tmp/wecom_audit.db"
     return "sqlite:///" + str(BASE_DIR / "wecom_audit.db")
 
 

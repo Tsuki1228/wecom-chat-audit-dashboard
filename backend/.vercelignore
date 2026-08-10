@@ -1,0 +1,7 @@
+# Vercel 构建上传时排除（不要上传本地虚拟环境与数据库）
+.venv/
+__pycache__/
+*.pyc
+*.db
+.pytest_cache/
+tests/

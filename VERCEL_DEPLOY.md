@@ -3,25 +3,24 @@
 本项目的 GitHub 已就绪（`main` 分支，测试全绿）。Vercel 需要**两个独立项目**：
 一个部署前端（`/frontend`），一个部署后端（`/backend`）。
 
-> 已知限制：Vercel Serverless 文件系统是临时/只读的，**SQLite 无法持久化**。
+> 已知限制：Vercel Serverless 文件系统是临时/只读的，**项目目录下的 SQLite 无法持久化**。
 > 因此后端在 Vercel 上**只能跑 `mock` 演示模式**（自动注入种子数据），
 > 真实企业微信拉取（`PULLER=wecom`）需要 Docker + SDK + 私钥，必须放在
 > Railway / Render / 自建服务器等能跑容器的地方。本指南部署的是可公开访问的演示版。
 
 ---
 
-## 0. 前置：准备一个外部 Postgres（必做）
+## 0. 数据库：演示态可免（可选）
 
-Vercel 后端不能用 SQLite，需要外部数据库。推荐 **Neon 免费层**（无需信用卡）：
+- **纯演示（默认）**：后端检测到 `VERCEL` 环境变量时，自动改用 **`/tmp` 下的临时 SQLite**，
+  冷启动自动重新灌种子。无需任何外部数据库，开箱即跑。代价：数据不跨函数实例持久化（每次冷启动重置）。
+- **真实持久化（生产态）**：若要让数据长期保存，再准备一个外部 Postgres（推荐 **Neon** 免费层，无需信用卡）：
+  1. 打开 https://neon.tech ，用 GitHub 登录，新建一个 Project。
+  2. 在 Dashboard 找到 **Connection String**（类似 `postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require`），复制整串。
+  3. 部署时把它作为 `DATABASE_URL` 环境变量传入即可（优先级高于 `/tmp` 默认）。
+  （Supabase 免费层也行，取 Connection URI 末尾加 `?sslmode=require`。）
 
-1. 打开 https://neon.tech ，用 GitHub 登录，新建一个 Project。
-2. 在 Dashboard 找到 **Connection String**（类似）：
-   ```
-   postgresql://user:password@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require
-   ```
-3. 复制整串，下一步会用作 `DATABASE_URL`。
-
-（Supabase 免费层也行，同样取 Connection URI，末尾加 `?sslmode=require`。）
+> 结论：如果你只是想公开演示，跳过本步，直接进第 1–3 步即可。
 
 ---
 
@@ -56,14 +55,15 @@ vercel --cwd backend --confirm
 
 | Key | Value | 说明 |
 |-----|-------|------|
-| `DATABASE_URL` | `postgresql://...?sslmode=require` | 第 0 步拿到的 Neon 串 |
+| `DATABASE_URL` | `postgresql://...?sslmode=require` | **可选**：留空则 Vercel 自动用 `/tmp` 临时 SQLite（演示态）；填了则走外部 Postgres（持久化） |
 | `JWT_SECRET`  | `openssl rand -hex 32` 生成的随机串 | 务必替换，不要用默认值 |
 | `PULLER`      | `mock` | Vercel 只能跑 mock |
 | `ADMIN_USERNAME` | `admin` | 演示账号 |
 | `ADMIN_PASSWORD`  | 自定义强密码 | 演示账号密码 |
 | `SEED_AUTO`   | `true` | 空库自动注入种子 |
 
-添加完变量后，**Redeploy**（触发重新构建，让 `DATABASE_URL` 生效并建表 + 灌种子）。
+> 演示态最简：只填 `JWT_SECRET` + `ADMIN_PASSWORD` 即可，其余用默认值（`PULLER=mock`、`SEED_AUTO=true`、数据库走 `/tmp`）。
+> 若填了 `DATABASE_URL`（外部 Postgres），添加完变量后 **Redeploy** 让它生效并建表 + 灌种子。
 
 健康检查：`https://<backend>.vercel.app/api/v1/health` 应返回 `{"code":0,...}`。
 
